@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macro Terminal: the US macro read, scored by market</title>
+<meta name="description" content="US growth, jobs, inflation and liquidity from FRED, scored into a bias for six markets. Runs on your own machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500&family=Atkinson+Hyperlegible+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="container bar__row">
+    <a class="mark" href="#board" aria-label="Macro Terminal, back to the board">Macro Terminal</a>
+    <nav class="tabs" aria-label="Views">
+      <a href="#board">Board</a>
+      <a href="#snapshot">Snapshot</a>
+      <a href="#indicators">Indicators</a>
+      <a href="#rates">Rates</a>
+      <a href="#calendar">Calendar</a>
+      <a href="#method">Method</a>
+    </nav>
+    <p class="updated measured" id="updated" role="status"></p>
+    <button class="btn btn--primary" id="refresh" type="button">Refresh</button>
+  </div>
+</header>
+<main class="container" id="app">
+  <div class="skeleton" aria-busy="true" aria-label="Loading the latest read from FRED">
+    <div class="skeleton__top"></div>
+    <div class="skeleton__row"></div>
+    <div class="skeleton__ledger"></div>
+  </div>
+</main>
+<noscript><p class="container">Macro Terminal draws its data with JavaScript. Turn it on for 127.0.0.1 and reload.</p></noscript>
+<script src="app.js"></script>
+</body>
+</html>
