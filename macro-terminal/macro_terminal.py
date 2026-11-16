@@ -713,7 +713,18 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
 
+def export(path):
+    """Write one fresh snapshot to a file, for hosting the front end as a static site (see .github/workflows/pages.yml)."""
+    today = date.today()
+    snap = build_snapshot(fetch_all(api_key(), today), today)
+    Path(path).write_text(json.dumps(snap))
+    print("Wrote %s" % path)
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--export":
+        export(sys.argv[2] if len(sys.argv) > 2 else HERE / "static" / "snapshot.json")
+        return
     try:
         # 127.0.0.1 only: nothing else on the network can reach this.
         server = ThreadingHTTPServer(("127.0.0.1", PORT), partial(Handler, directory=str(HERE / "static")))

@@ -3,6 +3,7 @@
 
 const app = document.getElementById("app");
 const refreshBtn = document.getElementById("refresh");
+const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
 const updated = document.getElementById("updated");
 let S = null;          // the snapshot
 let market = "spx";    // selected market on the board
@@ -440,7 +441,9 @@ async function load(force) {
   refreshBtn.disabled = true;
   refreshBtn.textContent = "Refreshing";
   try {
-    const res = await fetch("/api/snapshot" + (force ? "?refresh=1" : ""));
+    // Run locally, the Python server answers /api/snapshot. Hosted (GitHub Pages), a scheduled job writes snapshot.json.
+    const url = LOCAL ? "/api/snapshot" + (force ? "?refresh=1" : "") : "snapshot.json?t=" + Date.now();
+    const res = await fetch(url, { cache: "no-store" });
     const body = await res.json();
     if (res.ok) {
       S = body;
@@ -449,7 +452,7 @@ async function load(force) {
     } else if (!S) fail(body);
     else { S.stale_reason = body.message; render(); }
   } catch (e) {
-    if (!S) fail({ error: "fetch", message: "The local server is not responding. Start it again with: python3 macro_terminal.py" });
+    if (!S) fail({ error: "fetch", message: LOCAL ? "The local server is not responding. Start it again with: python3 macro_terminal.py" : "The data file could not be loaded. Try again in a minute." });
   }
   refreshBtn.disabled = false;
   refreshBtn.textContent = "Refresh";

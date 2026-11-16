@@ -1,0 +1,4 @@
+.env
+macro-terminal/static/snapshot.json
+cache.test.json
+__pycache__/
