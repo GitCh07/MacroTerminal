@@ -580,13 +580,17 @@ def fred(key, path, **params):
         time.sleep(2)
 
 
+YAHOO_LOCK = threading.Lock()
+
+
 def yahoo_closes(symbol, **window):
     """Daily closes from Yahoo through yfinance, if it is installed."""
     try:
         import yfinance
     except ImportError:
         raise RuntimeError("Needs the yfinance package. In Terminal: python3 -m pip install yfinance") from None
-    close = yfinance.Ticker(symbol).history(auto_adjust=False, **window)["Close"].dropna()
+    with YAHOO_LOCK:  # yfinance keeps a SQLite cache; two threads at once fail with "database is locked"
+        close = yfinance.Ticker(symbol).history(auto_adjust=False, **window)["Close"].dropna()
     return [[ts.date().isoformat(), float(v)] for ts, v in close.items()]
 
 
@@ -716,8 +720,10 @@ class Handler(SimpleHTTPRequestHandler):
 def export(path):
     """Write one fresh snapshot to a file, for hosting the front end as a static site (see .github/workflows/pages.yml)."""
     today = date.today()
-    snap = build_snapshot(fetch_all(api_key(), today), today)
-    Path(path).write_text(json.dumps(snap))
+    raw = fetch_all(api_key(), today)
+    for name, message in raw["errors"].items():
+        print("Warning: %s did not load: %s" % (name, message))
+    Path(path).write_text(json.dumps(build_snapshot(raw, today)))
     print("Wrote %s" % path)
 
 
