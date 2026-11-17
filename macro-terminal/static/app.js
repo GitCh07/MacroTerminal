@@ -20,7 +20,7 @@ let prefs = Object.assign(freshPrefs(), store.get("snapshot", {}));
 prefs.ids = [...new Set(prefs.ids.map((id) => ({ "10y2y": "slope", "10y3m": "slope" }[id] || id)))];
 const RAMP = ["", "line--ago", "line--old"];  // one hue stepped in lightness, always in this order
 const VIEW_LABELS = { "y/y": "Year on year", "3m annualised": "3-month pace", "q/q annualised": "Quarterly pace", "level": "Level", "monthly change": "Monthly change" };
-const SIDE_SOURCES = { sp500: "S&P 500 history", sectors: "Sector prices", fed: "Fed feeds" };
+const SIDE_SOURCES = { sp500: "S&P 500 history", sectors: "Sector prices", fed: "Fed feeds", benchmarks: "Benchmark prices" };
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v, dp = 1) => v == null ? "n/a" : (+v.toFixed(dp) || 0).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }).replace("-", "−");
@@ -414,7 +414,8 @@ function render() {
   document.querySelectorAll(".tabs a").forEach((a) => a.getAttribute("href") === "#" + view ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
   if (!S) return;
   if (view === "board" && arg) market = arg;
-  const views = { board, snapshot, indicators: () => indicators(arg), rates, calendar, method };
+  const views = { board, snapshot, indicators: () => indicators(arg), rates, calendar, method,
+    benchmarks: () => typeof benchmarksView === "function" ? benchmarksView() : board() };  // benchmarks (beta)
   app.innerHTML = (views[view] || board)();
   // An open row lives inside a table that may scroll sideways: hold it to the visible width.
   app.querySelectorAll(".detail__in").forEach((d) => { d.style.maxWidth = d.closest(".scroll").clientWidth - 48 + "px"; });

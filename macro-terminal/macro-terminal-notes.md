@@ -47,6 +47,11 @@
 ### Calendar
 - When each indicator next updates (next 45 days).
 
+### Benchmarks (beta)
+- The firm's benchmark lines rebuilt from ETF total returns, same periods as our report (1 day through 10 years).
+- Paste the report's table to see my figures beside the stand-ins and the gap. Stays in my browser; Caerus lines are dropped.
+- Funds that are their own benchmark (S&P 500 index, EFA, EMB, EMLC) match the report exactly. Bond and US lines are close. International bonds, EM, REITs and munis run behind because of fund fees and index differences; the Gap view shows by how much.
+
 ### Method
 - Plain-English scoring rules, market weights, and a health check of which data loaded.
 
