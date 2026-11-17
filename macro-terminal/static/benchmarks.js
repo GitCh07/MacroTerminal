@@ -83,7 +83,8 @@ function bmUploadView(U) {
 }
 
 function bmGap(B, U) {
-  if (!U.asOf) return { body: `<p class="notice">Add the date your figures are as of, so both sides are measured to the same close.</p>` };
+  if (!U.asOf) return { body: `<p class="notice">Add the date your figures are as of, so both sides are measured to the same close.</p>
+    <label class="bm-field"><span>Figures as of</span><input class="select" type="date" id="bm-date-only" name="bm-date-only"></label>` };
   const asOf = bmDateFor(U.asOf);
   if (!asOf) return { body: `<p class="notice">Your figures are dated ${day(U.asOf)}, earlier than the ${B.dates.length} trading days kept here. Upload a more recent table to compare.</p>` };
   const byName = Object.fromEntries(B.lines.map((l) => [bmName(l.name), l]));
@@ -166,6 +167,7 @@ app.addEventListener("click", (e) => {
 app.addEventListener("input", (e) => { if (e.target.id === "bm-paste") bm.draft = e.target.value; });
 app.addEventListener("change", (e) => {
   if (e.target.id === "bm-asof") { bm.asOf = e.target.value; render(); }
+  if (e.target.id === "bm-date-only" && e.target.value) { store.set(BM_KEY, { ...bmSaved(), asOf: e.target.value }); render(); }
   if (e.target.id === "bm-file" && e.target.files[0]) {
     const file = e.target.files[0];
     if (/\.xlsx?$/i.test(file.name)) { bm.error = "Excel files can't be read here. Save it as CSV, or copy the cells and paste them."; render(); return; }
