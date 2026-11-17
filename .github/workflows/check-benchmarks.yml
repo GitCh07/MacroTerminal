@@ -21,6 +21,38 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python macro-terminal/macro_terminal.py --export /tmp/snap.json
+      - name: Conventions
+        working-directory: macro-terminal
+        run: |
+          python - <<'PY'
+          import json, bisect
+          from datetime import date, timedelta
+          import benchmarks as bm, macro_terminal as mt
+          D = date(2026, 11, 16)
+          def me(d):  # last day of the month before d
+              return date(d.year, d.month, 1) - timedelta(days=1)
+          out = {}
+          for t in ["^SP500TR", "EFA", "EMB", "EMLC", "AGG", "SHV", "TLT"]:
+              rows = mt.yahoo_closes(t, adjusted=True, start="2015-06-01")
+              ds = [date.fromisoformat(x) for x, _ in rows]; vs = [c for _, c in rows]
+              def at(d, left=False):
+                  i = (bisect.bisect_left(ds, d) if left else bisect.bisect_right(ds, d) - 1)
+                  return vs[i]
+              res = {}
+              for n in (1, 3, 5, 10):
+                  b = bm.years_back(D, n)
+                  def ann(r): return round((r ** (1 / n) - 1) * 100, 2) if n > 1 else round((r - 1) * 100, 2)
+                  res[n] = dict(
+                      A_same_day=ann(at(D) / at(b)),
+                      B_from_month_end=ann(at(D) / at(me(b))),
+                      C_month_end_to_month_end=ann(at(me(D)) / at(me(bm.years_back(me(D) + timedelta(days=1), n)))),
+                      D_quarter_end=ann(at(date(2026, 9, 30)) / at(date(2026 - n, 9, 30))),
+                      E_next_day=ann(at(D) / at(b, left=True)),
+                      F_month_end_after=ann(at(D) / at(date(b.year, b.month + 1, 1) - timedelta(days=1)) if b.month < 12 else 0),
+                  )
+              out[t] = res
+          print("CONV", json.dumps(out))
+          PY
       - name: Report
         working-directory: macro-terminal
         run: |
