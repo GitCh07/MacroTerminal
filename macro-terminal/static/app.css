@@ -255,3 +255,7 @@ code { padding: var(--space-3xs) var(--space-2xs); border-radius: 4px; backgroun
   .factors li { grid-template-columns: minmax(0, 1fr) 40px 3ch; }
   .fixed th:nth-child(1) { width: 176px; }
 }
+
+/* animations: the frame static/viz/embed.js places under the view; its contents bring their own styles */
+#app:has(+ #viz-host) { padding-bottom: var(--space-xl); }
+#viz-host { padding-bottom: var(--space-3xl); }

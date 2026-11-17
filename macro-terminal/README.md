@@ -36,6 +36,35 @@ To remove the beta: delete `benchmarks.py`, `test_benchmarks.py` and `static/ben
 "benchmarks (beta)" in `macro_terminal.py`, `static/index.html`, `static/app.js` and `test_macro_terminal.py`.
 The terminal runs and its tests pass without them.
 
+## Animations
+
+The Animations button in the header turns on month-by-month replays. Off is the default, and off the terminal
+loads and behaves exactly as before: the replay code is never fetched and nothing animates. The setting is kept
+in your browser. On, each of three tabs gets a replay below it:
+
+- Rates: the Treasury yield curve (monthly averages of DGS1MO to DGS30 since 1982), with the six months before
+  it as fading trails and a dashed curve from a chosen time earlier, plus the 10Y-2Y and 10Y-3M spreads with
+  inversions shaded. Also a 3D surface and a heatmap. A maturity Treasury did not publish that month (the
+  30-year from 2002 to 2006, the 20-year from 1987 to 1993, the 1-month before July 2001) is left out of that
+  month, with a note, never filled in.
+- Board: why the bias moved. Each market's score split into what growth, jobs, inflation and liquidity added,
+  for the last 60 month-ends, and a market by month heatmap. Built with the board's own scoring code; the last
+  frame is today's board. Past frames use today's FRED data (with revisions) and an assumed release lag.
+- Benchmarks: paste a return history (a date column, then period returns in % per series, monthly or longer)
+  to see its rolling 12-month excess return, growth of 100 and up/down capture against up to four benchmark
+  stand-ins. The figures stay in your browser; Caerus columns are dropped.
+
+Every replay has play/pause, speed and a date slider, and stops drawing when it is scrolled out of view, the
+tab is hidden or it is switched off. They are labelled "Historical replay · not a forecast."
+
+The same refresh that builds the snapshot writes the frames to `static/viz/data/*.json` (`viz_frames.py`), so
+the browser only draws. Run locally, press Refresh once to build them. The replay page lives in `static/viz/`
+with its own styles and code, loaded in a frame; `static/viz/components.js` takes frames plus axis settings and
+can be reused elsewhere.
+
+To remove animations: delete `viz_frames.py`, `test_viz_frames.py` and `static/viz/`, then the lines marked
+"animations" in `macro_terminal.py`, `static/index.html` and `static/app.css`.
+
 ## Hosted copy (GitHub Pages)
 
 `.github/workflows/pages.yml` rebuilds the data on GitHub's servers at the same weekday times, with the
@@ -62,5 +91,7 @@ The Method tab in the app explains the scoring and lists any series that failed 
 ## Test it
 
     python3 test_macro_terminal.py
+    python3 test_benchmarks.py
+    python3 test_viz_frames.py
 
 Runs offline on synthetic data: the scoring maths, the snapshot build and the server.
