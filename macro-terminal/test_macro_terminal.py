@@ -4,6 +4,7 @@ import math
 import random
 import sys
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -234,6 +235,66 @@ class History(unittest.TestCase):
                 sys.modules["yfinance"] = saved
 
 
+class Schedule(unittest.TestCase):
+    NY = mt.NEW_YORK
+
+    def at(self, *a):
+        return datetime(*a, tzinfo=self.NY)
+
+    def test_slots_follow_the_release_times(self):
+        tue = self.at(2026, 11, 17, 9, 0)
+        self.assertEqual(mt.last_slot(tue), self.at(2026, 11, 17, 8, 37))
+        self.assertEqual(mt.next_slot(tue), self.at(2026, 11, 17, 10, 7))
+        self.assertEqual(mt.next_slot(self.at(2026, 11, 17, 18, 0)), self.at(2026, 11, 18, 8, 37))
+
+    def test_weekends_carry_friday_evening(self):
+        sat = self.at(2026, 11, 21, 12, 0)
+        self.assertEqual(mt.last_slot(sat), self.at(2026, 11, 20, 17, 7))
+        self.assertEqual(mt.next_slot(sat), self.at(2026, 11, 23, 8, 37))
+        self.assertEqual(mt.last_slot(self.at(2026, 11, 23, 7, 0)), self.at(2026, 11, 20, 17, 7))
+
+    @unittest.skipIf(mt.NEW_YORK is None, "no time-zone database")
+    def test_times_stay_on_new_york_clock_across_daylight_saving(self):
+        self.assertEqual(self.at(2026, 11, 2, 8, 37).utcoffset(), timedelta(hours=-5))
+        self.assertEqual(self.at(2026, 10, 30, 8, 37).utcoffset(), timedelta(hours=-4))
+
+    def test_workflow_runs_at_the_same_times(self):
+        workflow = (mt.HERE.parent / ".github" / "workflows" / "pages.yml").read_text()
+        for h, m in mt.REFRESH_AT:
+            self.assertIn('cron: "%d %d * * 1-5"' % (m, h), workflow)
+        self.assertEqual(workflow.count('timezone: "America/New_York"'), len(mt.REFRESH_AT))
+
+    def test_export_writes_the_schedule_for_the_hosted_page(self):
+        saved = mt.api_key, mt.fetch_all
+        out = mt.HERE / "snapshot.test.json"
+        try:
+            mt.api_key, mt.fetch_all = (lambda: "k"), (lambda key, today: fake_raw(today))
+            mt.export(out)
+            snap = json.loads(out.read_text())
+            self.assertIn("next_refresh", snap)
+            self.assertEqual(len(snap["refresh_at"]), len(mt.REFRESH_AT))
+        finally:
+            mt.api_key, mt.fetch_all = saved
+            out.unlink(missing_ok=True)
+
+    def test_tick_refreshes_once_then_backs_off_on_failure(self):
+        calls = []
+        saved = mt.get_snapshot, mt.cached_ts, mt.last_slot
+        try:
+            mt.last_slot = lambda now: datetime.now(self.NY) - timedelta(minutes=5)
+            mt.cached_ts = lambda: time.time() - 3600  # fetched before the scheduled time: due
+            mt.get_snapshot = lambda: calls.append(1) or (_ for _ in ()).throw(RuntimeError("down"))
+            tried = mt.tick(0)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(mt.tick(tried), tried)  # a failure waits RETRY_MINUTES before trying again
+            self.assertEqual(len(calls), 1)
+            mt.cached_ts = lambda: time.time()  # fetched since the scheduled time: nothing to do
+            self.assertEqual(mt.tick(0), 0)
+            self.assertEqual(len(calls), 1)
+        finally:
+            mt.get_snapshot, mt.cached_ts, mt.last_slot = saved
+
+
 class Snapshot(unittest.TestCase):
     def setUp(self):
         self.snap = mt.build_snapshot(fake_raw(), TODAY)
@@ -311,14 +372,14 @@ class Server(unittest.TestCase):
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), partial(mt.Handler, directory=str(mt.HERE / "static")))
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
-        self.saved = mt.CACHE, mt.api_key, mt.fetch_all
+        self.saved = mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot
         mt.CACHE = mt.HERE / "cache.test.json"
 
     def tearDown(self):
         self.srv.shutdown()
         self.srv.server_close()
         mt.CACHE.unlink(missing_ok=True)
-        mt.CACHE, mt.api_key, mt.fetch_all = self.saved
+        mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot = self.saved
 
     def test_no_key_is_a_setup_answer(self):
         def no_key():
@@ -337,9 +398,15 @@ class Server(unittest.TestCase):
             raise RuntimeError("Could not reach FRED")
         mt.fetch_all = down
         snap = json.loads(body)
-        snap["fetched_ts"] -= 3600  # an hour old: still fresh unless a refresh is forced
+        snap["fetched_ts"] -= 3600  # an hour old, and no scheduled time since: still fresh unless a refresh is forced
         mt.CACHE.write_text(json.dumps(snap))
-        self.assertNotIn("stale_reason", json.loads(self.get("/api/snapshot")[1]))
+        mt.last_slot = lambda now: now - timedelta(hours=2)
+        fresh = json.loads(self.get("/api/snapshot")[1])
+        self.assertNotIn("stale_reason", fresh)
+        self.assertIn("next_refresh", fresh)
+        self.assertEqual(fresh["refresh_at"], ["8:37 AM", "10:07 AM", "5:07 PM"])
+        mt.last_slot = lambda now: now - timedelta(minutes=30)  # a scheduled time has passed since the fetch
+        self.assertEqual(json.loads(self.get("/api/snapshot")[1])["stale_reason"], "Could not reach FRED")
         self.assertEqual(json.loads(self.get("/api/snapshot?refresh=1")[1])["stale_reason"], "Could not reach FRED")
 
     def test_static_files_and_no_escape(self):

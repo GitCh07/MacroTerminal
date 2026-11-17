@@ -26,10 +26,19 @@ from pathlib import Path
 from statistics import NormalDist
 from xml.etree import ElementTree
 
+try:
+    from zoneinfo import ZoneInfo
+    NEW_YORK = ZoneInfo("America/New_York")
+except Exception:  # shortcut: no time-zone database, so REFRESH_AT is read as this machine's local time
+    NEW_YORK = None
+
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / "cache.json"
 PORT = 8765
-CACHE_HOURS = 6      # FRED data changes at most daily
+# Weekday refresh times, New York time: just after the 8:30 and 10:00 releases, and once the day's rates have posted.
+# Off the top of the hour, when GitHub's scheduler is busiest. Keep in step with .github/workflows/pages.yml.
+REFRESH_AT = [(8, 37), (10, 7), (17, 7)]
+RETRY_MINUTES = 15   # wait before trying again after a refresh fails
 THRESHOLD = 0.5      # a factor scores once its pace gap passes half a typical move
 MIN_HISTORY = 24     # gap observations needed before a factor is scored
 CALENDAR_DAYS = 45
@@ -531,7 +540,7 @@ def build_snapshot(raw, today):
         extras=extras, midterm=midterm, fed=raw.get("fed", []),
         sectors=sector_returns(raw["sectors"]) if raw.get("sectors") else None,
         recessions=recession_ranges(*series["USREC"]) if "USREC" in series else [],
-        method=dict(threshold=THRESHOLD, windows=WINDOWS, stale_days=STALE_DAYS, cache_hours=CACHE_HOURS))
+        method=dict(threshold=THRESHOLD, windows=WINDOWS, stale_days=STALE_DAYS))
 
 
 # ---------- FRED ----------
@@ -672,6 +681,57 @@ def fetch_all(key, today):
 LOCK = threading.Lock()
 
 
+def ny_now():
+    return datetime.now(NEW_YORK)
+
+
+def slots(now):
+    """Scheduled refresh times from a week before now to a week after, weekdays only."""
+    days = (now.date() + timedelta(days=n) for n in range(-7, 8))
+    return [datetime(d.year, d.month, d.day, h, m, tzinfo=now.tzinfo) for d in days if d.weekday() < 5 for h, m in REFRESH_AT]
+
+
+def last_slot(now):
+    return max(s for s in slots(now) if s <= now)
+
+
+def next_slot(now):
+    return min(s for s in slots(now) if s > now)
+
+
+def schedule_info(now):
+    """What the page shows about the schedule. Added on the way out, not cached: the schedule moves on even when the data does not."""
+    return dict(next_refresh=next_slot(now).isoformat(),
+                refresh_at=["%d:%02d %s" % (h % 12 or 12, m, "AM" if h < 12 else "PM") for h, m in REFRESH_AT])
+
+
+def cached_ts():
+    try:
+        return json.loads(CACHE.read_text()).get("fetched_ts", 0)
+    except (OSError, ValueError):
+        return 0
+
+
+def tick(tried):
+    """One step of the scheduler: refresh if a scheduled time has passed since the last good fetch.
+    Returns when a refresh was last attempted, so a failure waits RETRY_MINUTES before the next try."""
+    if cached_ts() < last_slot(ny_now()).timestamp() and time.time() - tried > RETRY_MINUTES * 60:
+        tried = time.time()
+        try:
+            get_snapshot()
+        except Exception:
+            pass  # a missing key or a FRED outage is shown on the page when it next asks
+    return tried
+
+
+def keep_fresh():
+    # Checks every minute, so a refresh missed while the laptop slept runs soon after it wakes.
+    tried = 0
+    while True:
+        tried = tick(tried)
+        time.sleep(60)
+
+
 def get_snapshot(force=False):
     with LOCK:
         cached = None
@@ -681,8 +741,9 @@ def get_snapshot(force=False):
             except ValueError:
                 pass
         if cached:
-            age = time.time() - cached.get("fetched_ts", 0)
-            if age < 60 or (not force and age < CACHE_HOURS * 3600):  # 60s floor stops a double click refetching
+            fetched = cached.get("fetched_ts", 0)
+            # Fresh until the next scheduled time passes. The 60s floor stops a double click refetching.
+            if time.time() - fetched < 60 or (not force and fetched >= last_slot(ny_now()).timestamp()):
                 return cached
         try:
             snap = build_snapshot(fetch_all(api_key(), date.today()), date.today())
@@ -700,7 +761,8 @@ class Handler(SimpleHTTPRequestHandler):
         if path != "/api/snapshot":
             return super().do_GET()
         try:
-            code, body = 200, get_snapshot(force="refresh=1" in query)
+            now = ny_now()
+            code, body = 200, dict(get_snapshot(force="refresh=1" in query), **schedule_info(now))
         except Setup as e:
             code, body = 503, dict(error="setup", message=str(e))
         except Exception as e:
@@ -723,7 +785,7 @@ def export(path):
     raw = fetch_all(api_key(), today)
     for name, message in raw["errors"].items():
         print("Warning: %s did not load: %s" % (name, message))
-    Path(path).write_text(json.dumps(build_snapshot(raw, today)))
+    Path(path).write_text(json.dumps(dict(build_snapshot(raw, today), **schedule_info(ny_now()))))
     print("Wrote %s" % path)
 
 
@@ -737,6 +799,7 @@ def main():
     except OSError:
         sys.exit("Port %s is in use. Macro Terminal may already be running: open http://127.0.0.1:%s" % (PORT, PORT))
     url = "http://127.0.0.1:%s" % PORT
+    threading.Thread(target=keep_fresh, daemon=True).start()
     print("Macro Terminal is running at %s  (Ctrl+C to stop)" % url)
     webbrowser.open(url)
     try:

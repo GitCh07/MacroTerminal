@@ -14,7 +14,7 @@
 - **FRED (St. Louis Fed):** nearly everything. Free, official, the same source economists use. Needs a free API key.
 - **Yahoo Finance:** S&P 500 history back to 1950 and the sector funds. FRED only holds 10 years of the S&P under its licence.
 - **Federal Reserve website:** the latest policy statements and speeches.
-- Runs locally. Data refreshes every 6 hours, or on demand with Refresh.
+- Two ways to run it: a hosted page that GitHub rebuilds on its own servers, or locally on my laptop. Both refresh on weekdays just after the big releases land (8:37 AM, 10:07 AM, 5:07 PM New York time). Refresh pulls on demand.
 
 ## What's on screen
 
