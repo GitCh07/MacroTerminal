@@ -58,7 +58,7 @@ async function curve(el) {
     <h3>Spreads</h3>
     <div class="v-chart" data-spreads></div>
     <p class="v-legend"><span><i class="v-key" style="--key:${c[0]}"></i>10-year minus 2-year</span><span><i class="v-key" style="--key:${c[1]}"></i>10-year minus 3-month</span><span><i class="v-key v-key--band"></i>shaded where that spread was below zero (inverted)</span></p>
-    <p class="v-source">Monthly averages of FRED's daily constant-maturity yields (DGS1MO to DGS30), January 1982 on. A maturity with no published value is left out of that month, never filled in.</p>
+    <p class="v-source">Monthly averages of FRED's daily constant-maturity yields (DGS1MO to DGS30), January 1982 through the last full month. A maturity with no published value is left out of that month, never filled in; so is the 30-year from February 2002 to February 2006, when Treasury published only an estimate of it.</p>
   </section>`;
   const q = (s) => el.querySelector(s), main = q("[data-main]");
   const legends = {
@@ -122,7 +122,7 @@ async function bias(el) {
     <p class="v-readout" data-why></p>
     <h3>Every market, every month</h3>
     <div class="v-chart" data-heat></div>
-    <p class="v-legend"><span><i class="v-key" style="--key:${token("v-neg")}"></i>bearish</span><span><i class="v-key" style="--key:${token("v-mid")}"></i>neutral</span><span><i class="v-key" style="--key:${token("v-pos")}"></i>bullish</span><span>The outlined column is the month shown.</span></p>
+    <p class="v-legend"><span><i class="v-key" style="--key:${token("v-neg")}"></i>bearish</span><span><i class="v-key" style="--key:${token("v-mid")}"></i>neutral</span><span><i class="v-key" style="--key:${token("v-pos")}"></i>bullish</span><span>Colour is full from ±0.6. The outlined column is the month shown.</span></p>
     <p class="v-source">${esc(d.note)}</p>
   </section>`;
   const q = (s) => el.querySelector(s);
@@ -133,7 +133,7 @@ async function bias(el) {
   });
   const heat = heatmap(q("[data-heat]"), {
     label: "Bias score by market and month", rows, cols: labels, rowH: 22,
-    value: (r, k) => d.frames[k].scores[d.markets[r].id], color: (v) => div((v + 1) / 2),
+    value: (r, k) => d.frames[k].scores[d.markets[r].id], color: (v) => div((Math.max(-0.6, Math.min(0.6, v)) / 0.6 + 1) / 2),  // full colour from ±0.6, past the very bullish/bearish line
     fmt: (v) => `${signed(v)} (${word(v)})`, tick: (k) => labels[k],
   });
   const frame = (i, f) => {

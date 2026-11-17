@@ -25,9 +25,12 @@ MATURITIES = [("1M", "DGS1MO", 1 / 12), ("3M", "DGS3MO", 0.25), ("6M", "DGS6MO",
               ("2Y", "DGS2", 2), ("3Y", "DGS3", 3), ("5Y", "DGS5", 5), ("7Y", "DGS7", 7), ("10Y", "DGS10", 10),
               ("20Y", "DGS20", 20), ("30Y", "DGS30", 30)]
 CURVE_START = "1982-01-01"  # the first full year with the 3-month bill, so both spreads run from the first frame
-GAP_WHY = {"DGS1MO": "FRED's 1-month series starts July 2001",
-           "DGS20": "Treasury dropped the 20-year from 1987 and brought it back in October 1993",
-           "DGS30": "Treasury stopped issuing the 30-year bond from February 2002 to February 2006"}
+GAP_WHY = {"DGS1MO": "FRED's 1-month series starts on the last day of July 2001",
+           "DGS20": "Treasury dropped the 20-year series from 1987 and brought it back in October 1993",
+           "DGS30": "Treasury discontinued the 30-year series from February 18, 2002 to February 9, 2006"}
+# FRED still returns DGS30 values inside its own stated break, and Treasury published only an estimate then (the 20-year
+# plus an extrapolation factor), so every month touching the break is left out rather than drawn as if it were the series.
+BREAKS = {"DGS30": ("2002-02", "2006-02")}
 
 # shortcut: one assumed release lag per frequency (days after the observation date), not each release's real date.
 # Good to a few weeks; FRED keeps revised figures, so a past frame is not the exact read that was live then.
@@ -53,7 +56,8 @@ def runs(months, flags):
 
 def curve_frames(observations, today):
     """observations: {series id: FRED monthly observations}. A month with no value stays None, never interpolated."""
-    by_sid = {sid: {o["date"][:7]: float(o["value"]) for o in obs if o["value"] not in (".", "")}
+    by_sid = {sid: {o["date"][:7]: float(o["value"]) for o in obs if o["value"] not in (".", "")
+                    and not BREAKS.get(sid, ("", ""))[0] <= o["date"][:7] <= BREAKS.get(sid, ("", ""))[1]}
               for sid, obs in observations.items()}
     months = sorted({m for got in by_sid.values() for m in got if m >= CURVE_START[:7]})
     frames = [[by_sid.get(sid, {}).get(m) for _, sid, _ in MATURITIES] for m in months]

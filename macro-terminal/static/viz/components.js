@@ -305,7 +305,7 @@ export function heatmap(el, cfg) {
       for (let c = 0; c < nc; c++) {
         const v = cfg.value(ri, c);
         g.fillStyle = v == null ? token("v-paper-3") : cfg.color(v);
-        g.fillRect(x(c), box.t + ri * rowH, Math.max(1, x(c + 1) - x(c) - gap), rowH - 2);
+        g.fillRect(x(c), box.t + ri * rowH, Math.max(1, x(c + 1) - x(c) - gap + (gap ? 0 : 0.5)), rowH - 2);  // overlap a hair when packed, so no seams
       }
     });
     cells.w = s.w;
@@ -342,7 +342,7 @@ export function surface(el, cfg) {
 
   s.draw = () => {
     const { ctx } = s, nx = cfg.x.length, depthX = Math.min(220, s.w * 0.28), depthY = 120;
-    const l = 52, r = 16 + depthX, base = s.h - 34, top = 14 + depthY;
+    const l = 52, r = 84 + depthX, base = s.h - 34, top = 14 + depthY;  // room for the date labels at the right
     const px = (k, z) => l + (k / (nx - 1)) * (s.w - l - r) + z * depthX;  // z: 0 front (now) .. 1 back (oldest)
     const py = (v, z) => base - ((v - lo) / (hi - lo)) * (base - top) - z * depthY;
     ctx.clearRect(0, 0, s.w, s.h);

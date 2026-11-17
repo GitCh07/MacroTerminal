@@ -11,14 +11,13 @@ import viz_frames as v
 
 
 def fake_curve():
-    """Monthly averages with the real gaps: 1M from Jul 2001, no 30Y Mar 2002-Jan 2006, no 20Y 1987-Sep 1993."""
+    """Monthly averages as FRED serves them: 1M from Aug 2001, no 20Y 1987-Sep 1993, and 30Y values even inside its break."""
     months = ["%d-%02d-01" % (y, m) for y in range(1982, 2027) for m in range(1, 13) if (y, m) <= (2026, 11)]
     out = {}
     for k, (label, sid, years) in enumerate(v.MATURITIES):
         rows = []
         for i, d in enumerate(months):
-            gone = ((sid == "DGS1MO" and d < "2001-07") or (sid == "DGS30" and "2002-03" <= d < "2006-02")
-                    or (sid == "DGS20" and "1987-01" <= d < "1993-10"))
+            gone = sid == "DGS20" and "1987-01" <= d < "1993-10"
             if sid == "DGS1MO" and d < "2001-07":
                 continue  # FRED returns nothing before a series starts
             # short end above the long end in 2006-07, so both spreads invert there
@@ -34,11 +33,12 @@ class Curve(unittest.TestCase):
 
     def test_gaps_stay_empty_and_are_named(self):
         i30, i1 = [m["label"] for m in self.c["maturities"]].index("30Y"), 0
-        frame = self.c["frames"][self.c["months"].index("2004-06")]
-        self.assertIsNone(frame[i30])
+        for m in ("2002-02", "2004-06", "2006-02"):
+            self.assertIsNone(self.c["frames"][self.c["months"].index(m)][i30], m)
+        self.assertIsNotNone(self.c["frames"][self.c["months"].index("2006-03")][i30])
         self.assertIsNone(self.c["frames"][0][i1])
         notes = {(n["maturity"], n["start"], n["end"]) for n in self.c["notes"]}
-        self.assertEqual(notes, {("1M", "1982-01", "2001-06"), ("30Y", "2002-03", "2006-01"), ("20Y", "1987-01", "1993-09")})
+        self.assertEqual(notes, {("1M", "1982-01", "2001-06"), ("30Y", "2002-02", "2006-02"), ("20Y", "1987-01", "1993-09")})
         self.assertTrue(all(n["why"] for n in self.c["notes"]))
 
     def test_every_frame_has_every_maturity_slot(self):
