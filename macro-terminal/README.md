@@ -20,7 +20,17 @@ The core needs no packages. Two panels are optional: the midterm history and the
 through yfinance (`python3 -m pip install yfinance`, already in your macro-env). Without it those panels say so
 and everything else works.
 
-Data is cached in `cache.json` for 6 hours; the Refresh button pulls it again.
+It refreshes itself while running: weekdays at 8:37 AM, 10:07 AM and 5:07 PM New York time, just after the
+main releases land, and on start-up or wake if it missed one. An open page checks back every five minutes and
+when you return to the tab. The Refresh button pulls everything now. Data is kept in `cache.json`.
+
+## Hosted copy (GitHub Pages)
+
+`.github/workflows/pages.yml` rebuilds the data on GitHub's servers at the same weekday times, with the
+`FRED_API_KEY` repo secret, and publishes the page. No laptop needed. GitHub can start scheduled runs late,
+and stops them in a repo with no activity for 60 days. To refresh by hand: Actions tab, "Publish to GitHub
+Pages", Run workflow. To change the times, edit `REFRESH_AT` in `macro_terminal.py` and the three cron lines
+in the workflow together (a test checks they match).
 Keep `.env` out of any GitHub repo.
 
 ## Change it

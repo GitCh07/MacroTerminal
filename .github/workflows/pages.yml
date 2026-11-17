@@ -1,4 +1,4 @@
-# Publishes Macro Terminal to GitHub Pages and refreshes the data every 6 hours.
+# Publishes Macro Terminal to GitHub Pages and refreshes the data on weekdays just after the main US releases.
 # Needs: repo secret FRED_API_KEY, and Settings > Pages > Source set to "GitHub Actions".
 name: Publish to GitHub Pages
 
@@ -6,7 +6,15 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "17 */6 * * *"
+    # New York time: after the 8:30 releases (jobs, CPI, GDP, claims), the 10:00 releases (job openings, sentiment),
+    # and once the day's rates and spreads have posted. Off the top of the hour, when GitHub's scheduler is busiest.
+    # Keep in step with REFRESH_AT in macro_terminal.py (a test checks).
+    - cron: "37 8 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "7 10 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "7 17 * * 1-5"
+      timezone: "America/New_York"
   workflow_dispatch:
 
 permissions:

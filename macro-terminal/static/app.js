@@ -3,8 +3,8 @@
 
 const app = document.getElementById("app");
 const refreshBtn = document.getElementById("refresh");
-const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
 const updated = document.getElementById("updated");
+const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
 let S = null;          // the snapshot
 let market = "spx";    // selected market on the board
 
@@ -400,7 +400,9 @@ function method() {
     <h2>What this cannot tell you</h2>
     <p>It reads macro data only: no valuations, positioning, earnings or price trend. Strong jobs data is scored as good for stocks, which fails when the Fed is tightening into strength. The regime map and the recession checks are published models with well-known misses. The 12-month recession chance applies the New York Fed's published coefficients to the last month of the 10-year minus 3-month spread, so it can sit slightly off the Fed's own monthly figure. Use it to frame a view, then test that view elsewhere.</p>
   </section>
-  <section><h2>Data health</h2><p>Loaded ${esc(new Date(S.fetched_at).toLocaleString())}. Data is reused for ${M.cache_hours} hours unless you press Refresh.</p>
+  <section><h2>Data health</h2><p>Loaded ${esc(new Date(S.fetched_at).toLocaleString())}. ${LOCAL
+    ? `While the terminal is running it refreshes on weekdays at ${(S.refresh_at || []).join(", ")} New York time, just after the main releases land, and catches up on any time it missed while the computer was asleep or the terminal was closed. Refresh pulls everything now.`
+    : `This hosted copy is rebuilt by GitHub on weekdays at ${(S.refresh_at || []).join(", ")} New York time, just after the main releases land. GitHub can start these runs late when it is busy. Refresh loads the latest copy.`} An open page checks back every few minutes and redraws when new data arrives.</p>
     <div class="scroll"><table><thead><tr><th>Indicator</th><th>FRED series</th><th>Group</th><th>Latest period</th><th>Status</th></tr></thead><tbody>${health}</tbody></table></div>
     ${other ? `<p>Also failed on this load:</p><ul class="steps">${other}</ul>` : ""}</section>`;
 }
@@ -437,25 +439,31 @@ function fail(body) {
     : `<p class="muted">Check your connection, then press Refresh.</p>`}</section>`;
 }
 
-async function load(force) {
-  refreshBtn.disabled = true;
-  refreshBtn.textContent = "Refreshing";
+// "8:35 AM" today, "Mon 8:35 AM" on another day.
+function when(iso) {
+  const d = new Date(iso), time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? time : d.toLocaleDateString("en-US", { weekday: "short" }) + " " + time;
+}
+
+// quiet: a background check, which leaves the button alone and redraws only when the data changed.
+async function load(force, quiet) {
+  if (!quiet) { refreshBtn.disabled = true; refreshBtn.textContent = "Refreshing"; }
   try {
-    // Run locally, the Python server answers /api/snapshot. Hosted (GitHub Pages), a scheduled job writes snapshot.json.
-    const url = LOCAL ? "/api/snapshot" + (force ? "?refresh=1" : "") : "snapshot.json?t=" + Date.now();
-    const res = await fetch(url, { cache: "no-store" });
+    // Run locally, the Python server answers /api/snapshot. Hosted (GitHub Pages), a scheduled job writes snapshot.json,
+    // and "no-cache" asks the host whether the file changed, so a check costs little when it has not.
+    const res = await fetch(LOCAL ? "/api/snapshot" + (force ? "?refresh=1" : "") : "snapshot.json", { cache: LOCAL ? "no-store" : "no-cache" });
     const body = await res.json();
     if (res.ok) {
+      const changed = !S || body.fetched_at !== S.fetched_at || body.stale_reason !== S.stale_reason;
       S = body;
-      updated.textContent = "Data loaded " + new Date(S.fetched_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-      render();
+      updated.textContent = `Refreshed ${when(S.fetched_at)}.` + (S.next_refresh ? ` Next${LOCAL ? "" : " due"} ${when(S.next_refresh)}` : "");
+      if (changed) render();
     } else if (!S) fail(body);
-    else { S.stale_reason = body.message; render(); }
+    else if (!quiet) { S.stale_reason = body.message; render(); }
   } catch (e) {
     if (!S) fail({ error: "fetch", message: LOCAL ? "The local server is not responding. Start it again with: python3 macro_terminal.py" : "The data file could not be loaded. Try again in a minute." });
   }
-  refreshBtn.disabled = false;
-  refreshBtn.textContent = "Refresh";
+  if (!quiet) { refreshBtn.disabled = false; refreshBtn.textContent = "Refresh"; }
 }
 
 function setPrefs(change) {
@@ -481,6 +489,10 @@ app.addEventListener("change", (e) => {
 });
 refreshBtn.addEventListener("click", () => load(true));
 window.addEventListener("hashchange", render);
+// Check back while the page is open, when the tab comes back into view, and when the browser restores it from memory.
+setInterval(() => { if (!document.hidden) load(false, true); }, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(false, true); });
+window.addEventListener("pageshow", (e) => { if (e.persisted) load(false, true); });
 let resizing;
 window.addEventListener("resize", () => { clearTimeout(resizing); resizing = setTimeout(render, 150); });
 render();
