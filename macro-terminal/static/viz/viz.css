@@ -41,7 +41,7 @@ p { margin: 0; max-width: 72ch; }
 .v-chart canvas { display: block; touch-action: pan-y; }
 
 .v-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--v-space-sm) var(--v-space-lg); }
-.v-player { display: flex; flex: 1 1 420px; flex-wrap: wrap; align-items: center; gap: var(--v-space-sm); min-width: 0; }
+.v-player { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: var(--v-space-sm); min-width: 0; }
 .v-scrub { flex: 1 1 180px; min-width: 0; accent-color: var(--v-accent); }
 .v-at { min-width: 13ch; font-family: var(--v-font-mono); font-size: var(--v-text-sm); font-variant-numeric: tabular-nums; }
 .v-field { display: inline-flex; align-items: center; gap: var(--v-space-xs); color: var(--v-muted); font-size: var(--v-text-sm); }

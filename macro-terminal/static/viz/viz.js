@@ -37,7 +37,7 @@ async function curve(el) {
   const n = d.months.length, x = d.maturities.map((m) => m.label);
   const labels = d.months.map((m, i) => month(m) + (d.partial && i === n - 1 ? ", month to date" : ""));
   const c = cats(), colors = { current: token("v-current"), ghost: token("v-current"), reference: token("v-reference") };
-  let mode = "curve", ref = 12, chart;
+  let mode = "curve", ref = 12, scale = "all", chart;
   el.innerHTML = `<section class="v-section" aria-labelledby="v-curve-h">
     <div class="v-head"><h2 id="v-curve-h">Treasury yield curve</h2><p class="v-tag">${TAG}</p></div>
     <div class="v-controls">
@@ -50,6 +50,7 @@ async function curve(el) {
       <label class="v-field" data-refbox>Compare with <select data-ref>
         ${[3, 6, 12, 24, 60, 120].map((k) => `<option value="${k}" ${k === 12 ? "selected" : ""}>${k < 24 ? k + " months" : k / 12 + " years"} ago</option>`).join("")}
         <option value="0">nothing</option></select></label>
+      <label class="v-field" data-scalebox>Scale <select data-scale><option value="all">1982 to now</option><option value="recent">Last 10 years</option></select></label>
     </div>
     <div class="v-chart" data-main></div>
     <p class="v-legend" data-legend></p>
@@ -58,7 +59,7 @@ async function curve(el) {
     <h3>Spreads</h3>
     <div class="v-chart" data-spreads></div>
     <p class="v-legend"><span><i class="v-key" style="--key:${c[0]}"></i>10-year minus 2-year</span><span><i class="v-key" style="--key:${c[1]}"></i>10-year minus 3-month</span><span><i class="v-key v-key--band"></i>shaded where that spread was below zero (inverted)</span></p>
-    <p class="v-source">Monthly averages of FRED's daily constant-maturity yields (DGS1MO to DGS30), January 1982 through the last full month. A maturity with no published value is left out of that month, never filled in; so is the 30-year from February 2002 to February 2006, when Treasury published only an estimate of it.</p>
+    <p class="v-source">Monthly averages of FRED's daily constant-maturity yields (DGS1MO to DGS30), January 1982 on; the latest month averages the days so far and is marked month to date. A maturity with no published value is left out of that month, never filled in; so is the 30-year from February 2002 to February 2006, when Treasury published only an estimate of it.</p>
   </section>`;
   const q = (s) => el.querySelector(s), main = q("[data-main]");
   const legends = {
@@ -68,9 +69,9 @@ async function curve(el) {
   };
   const build = () => {
     main.innerHTML = "";
-    q("[data-refbox]").hidden = mode !== "curve";
+    q("[data-refbox]").hidden = q("[data-scalebox]").hidden = mode !== "curve";
     q("[data-legend]").innerHTML = legends[mode]();
-    if (mode === "curve") chart = profile(main, { label: "Animated Treasury yield curve", x, frames: d.frames, unit: "%", ghosts: 6, colors, include: [0], refLabel: (r) => labels[r] });
+    if (mode === "curve") chart = profile(main, { label: "Animated Treasury yield curve", x, frames: d.frames, unit: "%", ghosts: 6, colors, include: [0], refLabel: (r) => labels[r], domain: scale === "recent" ? d.frames.slice(-120).flat() : null });
     else if (mode === "surface") { const color = seq(); chart = surface(main, { label: "Yield surface: maturity across, time in depth, yield up", x, frames: d.frames, dates: labels, window: 120, unit: "%", color: (v) => color(v / 10), current: colors.current }); }
     else {
       const top = Math.max(...d.frames.flat().filter((v) => v != null)), color = seq();
@@ -101,6 +102,7 @@ async function curve(el) {
     el.querySelectorAll("[data-mode]").forEach((o) => o.setAttribute("aria-pressed", o === b));
     build(); p.redraw();
   }));
+  q("[data-scale]").addEventListener("change", (e) => { scale = e.target.value; build(); p.redraw(); });
   q("[data-ref]").addEventListener("change", (e) => { ref = +e.target.value; q("[data-legend]").innerHTML = legends[mode](); p.redraw(); });
 }
 
@@ -273,6 +275,18 @@ async function bench(el) {
 }
 
 // ---------- boot ----------
+
+// The terminal says when it has new data; reload once the frames built for that data are in place.
+addEventListener("message", (e) => {
+  if (e.source !== parent || e.origin !== location.origin || e.data?.mtviz !== "refresh") return;
+  const file = { bias: "bias_history.json", bench: "benchmark_levels.json" }[view] || "yield_curve.json";
+  let tries = 0;
+  const check = async () => {
+    try { if ((await data(file)).built_for === e.data.for) return location.reload(); } catch { /* not there yet */ }
+    if (++tries < 36) setTimeout(check, 5000);  // locally the frames build a little after the snapshot; give it three minutes
+  };
+  check();
+});
 
 (async () => {
   await ({ curve, bias, bench }[view] || curve)(root);

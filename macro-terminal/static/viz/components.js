@@ -203,7 +203,7 @@ export function player(root, { labels, onFrame, start = labels.length - 1, fps =
 export function profile(el, cfg) {
   const s = stage(el, cfg.height || 320, cfg.label);
   const box = { l: 52, r: 16, t: 14, b: 30 };
-  const [lo, hi] = extent(cfg.frames.flat(), 0.06, cfg.include || []);
+  const [lo, hi] = extent(cfg.domain || cfg.frames.flat(), 0.06, cfg.include || []);  // domain: values to fit, when not all of them
   const ys = niceTicks(lo, hi);
   const x = (k) => box.l + (k / (cfg.x.length - 1)) * (s.w - box.l - box.r);
   const y = (v) => box.t + (1 - (v - lo) / (hi - lo)) * (s.h - box.t - box.b);
@@ -219,6 +219,8 @@ export function profile(el, cfg) {
       ctx.fillStyle = cur[k] == null ? token("v-rule-2") : token("v-muted");
       ctx.fillText(label, x(k), s.h - 8);
     });
+    ctx.save();  // a narrower scale can push older curves past the plot: clip, never squash
+    ctx.beginPath(); ctx.rect(box.l, box.t, s.w - box.l - box.r, s.h - box.t - box.b); ctx.clip();
     for (let g = cfg.ghosts || 0; g >= 1; g--) {
       if (i - g < 0) continue;
       ctx.globalAlpha = 0.5 * (1 - g / ((cfg.ghosts || 0) + 1));
@@ -229,6 +231,7 @@ export function profile(el, cfg) {
     const now = pts(cur);
     line(ctx, now, cfg.colors.current, 2.5);
     now.forEach(([px, py]) => dot(ctx, px, py, cfg.colors.current, 4));
+    ctx.restore();
   };
   hover(s, (mx) => {
     const k = Math.round(((mx - box.l) / (s.w - box.l - box.r)) * (cfg.x.length - 1));

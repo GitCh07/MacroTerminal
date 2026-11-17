@@ -36,34 +36,38 @@ To remove the beta: delete `benchmarks.py`, `test_benchmarks.py` and `static/ben
 "benchmarks (beta)" in `macro_terminal.py`, `static/index.html`, `static/app.js` and `test_macro_terminal.py`.
 The terminal runs and its tests pass without them.
 
-## Animations
+## Replays
 
-The Animations button in the header turns on month-by-month replays. Off is the default, and off the terminal
-loads and behaves exactly as before: the replay code is never fetched and nothing animates. The setting is kept
-in your browser. On, each of three tabs gets a replay below it:
+Board, Rates and Benchmarks each end with a closed section. Nothing for it loads until you open it, so the
+terminal loads as it did before the replays existed. Opening one loads that chart only, drawn on the latest
+month; press Play to run it month by month. A section you leave open stays open next time.
 
-- Rates: the Treasury yield curve (monthly averages of DGS1MO to DGS30 since 1982), with the six months before
-  it as fading trails and a dashed curve from a chosen time earlier, plus the 10Y-2Y and 10Y-3M spreads with
-  inversions shaded. Also a 3D surface and a heatmap. A maturity Treasury did not publish that month (the
-  30-year from 2002 to 2006, the 20-year from 1987 to 1993, the 1-month before July 2001) is left out of that
-  month, with a note, never filled in.
-- Board: why the bias moved. Each market's score split into what growth, jobs, inflation and liquidity added,
-  for the last 60 month-ends, and a market by month heatmap. Built with the board's own scoring code; the last
-  frame is today's board. Past frames use today's FRED data (with revisions) and an assumed release lag.
-- Benchmarks: paste a return history (a date column, then period returns in % per series, monthly or longer)
-  to see its rolling 12-month excess return, growth of 100 and up/down capture against up to four benchmark
-  stand-ins. The figures stay in your browser; Caerus columns are dropped.
+- Rates, "Yield curve over time": the Treasury curve from 1982 (monthly averages of DGS1MO to DGS30, the current
+  month averaged over its days so far), with the six months before it as fading trails, a dashed curve from a
+  chosen time earlier, and a scale for the whole history or the last 10 years. Also a 3D surface and a heatmap,
+  and the 10Y-2Y and 10Y-3M spreads with inversions shaded. A maturity Treasury did not publish that month is
+  left out with a note, never filled in, and so is the 30-year from February 2002 to February 2006, when FRED
+  carries only Treasury's estimate of it.
+- Board, "How the bias got here": each market's score split into what growth, jobs, inflation and liquidity
+  added, for the last 60 month-ends, and a market by month heatmap. Built with the board's own scoring code on
+  the figures as they were published at each month-end (FRED's ALFRED archive), so a past month shows the read
+  the board would have given then. The last frame is today's board.
+- Benchmarks, "Your returns vs. benchmarks over time": paste a return history (a date column, then period
+  returns in % per series, monthly or longer) to see its rolling 12-month excess return, growth of 100 and
+  up/down capture against up to four benchmark stand-ins. The figures stay in your browser; Caerus columns are
+  dropped.
 
-Every replay has play/pause, speed and a date slider, and stops drawing when it is scrolled out of view, the
-tab is hidden or it is switched off. They are labelled "Historical replay · not a forecast."
+Every replay has play/pause, speed and a date slider, and stops drawing when it is closed, scrolled out of view
+or the tab is hidden. An open replay reloads itself when the terminal takes in new data. They are labelled
+"Historical replay · not a forecast."
 
-The same refresh that builds the snapshot writes the frames to `static/viz/data/*.json` (`viz_frames.py`), so
-the browser only draws. Run locally, press Refresh once to build them. The replay page lives in `static/viz/`
-with its own styles and code, loaded in a frame; `static/viz/components.js` takes frames plus axis settings and
-can be reused elsewhere.
+The frames are written to `static/viz/data/*.json` by `viz_frames.py`: by the hosted build right after the
+snapshot, and locally in the background after Refresh, so Refresh is no slower. Run locally, press Refresh once
+to build them. The replay page lives in `static/viz/` with its own styles and code, loaded in a frame;
+`static/viz/components.js` takes frames plus axis settings and can be reused elsewhere.
 
-To remove animations: delete `viz_frames.py`, `test_viz_frames.py` and `static/viz/`, then the lines marked
-"animations" in `macro_terminal.py`, `static/index.html` and `static/app.css`.
+To remove the replays: delete `viz_frames.py`, `test_viz_frames.py` and `static/viz/`, then the lines marked
+"replays" in `macro_terminal.py`, `static/index.html` and `static/app.css`.
 
 ## Hosted copy (GitHub Pages)
 

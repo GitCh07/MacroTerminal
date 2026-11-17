@@ -256,6 +256,10 @@ code { padding: var(--space-3xs) var(--space-2xs); border-radius: 4px; backgroun
   .fixed th:nth-child(1) { width: 176px; }
 }
 
-/* animations: the frame static/viz/embed.js places under the view; its contents bring their own styles */
+/* replays: the closed section static/viz/embed.js places under Board, Rates and Benchmarks; the chart inside brings its own styles */
 #app:has(+ #viz-host) { padding-bottom: var(--space-xl); }
-#viz-host { padding-bottom: var(--space-3xl); }
+.replay { padding-bottom: var(--space-3xl); }
+.replay details { border-top: var(--rule-hair) solid var(--color-rule); padding-top: var(--space-sm); }
+.replay summary { font-size: var(--text-md); }
+.replay__wait { margin-top: var(--space-sm); font-size: var(--text-sm); }
+.replay__frame { display: block; width: 100%; height: 0; margin-top: var(--space-md); border: 0; }
