@@ -67,10 +67,17 @@ class Periods(unittest.TestCase):
         self.assertAlmostEqual(r[2], (1.1 ** (13 / 365) - 1) * 100, places=2)  # MTD: from the October 31 close
         self.assertAlmostEqual(r[3], (1.1 ** (44 / 365) - 1) * 100, places=2)  # QTD: from the September 30 close
         self.assertAlmostEqual(r[4], (1.1 ** (317 / 365) - 1) * 100, places=2)  # YTD: from the December 31 close
-        self.assertAlmostEqual(r[5], 10.0, places=2)  # 1 year, 365 days
-        self.assertAlmostEqual(r[6], 10.0, delta=0.02)  # 3 years annualised (one leap day inside)
-        self.assertAlmostEqual(r[7], 10.0, delta=0.02)  # 5 years annualised
+        # 1 year runs from the month-end before the date a year back (31 October 2025), cumulative: 378 days
+        self.assertAlmostEqual(r[5], (1.1 ** (378 / 365) - 1) * 100, places=2)
+        # longer periods also start at a month-end and are annualised over the actual time: back to about 10%
+        self.assertAlmostEqual(r[6], 10.0, delta=0.02)
+        self.assertAlmostEqual(r[7], 10.0, delta=0.02)
         self.assertIsNone(r[8])  # the history starts in 2018: no 10-year figure, rather than a wrong one
+
+    def test_long_periods_start_at_the_month_end(self):
+        d = [date(2023, 10, 31), date(2023, 11, 15), date(2026, 11, 16)]
+        r = bm.period_returns(d, [100, 50, 200], 2)
+        self.assertAlmostEqual(r[6], (2 ** (365.25 / 1112) - 1) * 100, places=2)  # from 31 Oct 2023, not 15 Nov
 
     def test_leap_day(self):
         self.assertEqual(bm.years_back(date(2028, 2, 29), 1), date(2027, 2, 28))

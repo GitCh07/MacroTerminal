@@ -2,6 +2,7 @@
 
 Free sources do not carry Bloomberg, MSCI or Russell index returns, so each line stands in with the ETF that tracks it
 (or the index itself where Yahoo has it), using dividend-adjusted closes. Blends rebalance to their weights each month.
+Periods follow the firm report they were checked against (see period_returns), so the figures line up with it.
 
 To remove the beta: delete this file and static/benchmarks.js, then the lines marked "benchmarks (beta)" in
 macro_terminal.py, static/index.html and static/app.js.
@@ -87,22 +88,29 @@ def years_back(d, n):
         return d.replace(year=d.year - n, day=28)
 
 
+def month_end_before(d):
+    return date(d.year, d.month, 1) - timedelta(days=1)
+
+
 def period_returns(dates, vals, i):
-    """Returns in percent at dates[i] for each of PERIODS: cumulative up to a year, annualised beyond."""
+    """Returns in percent at dates[i] for each of PERIODS, measured from the close on or before each start date.
+
+    Matches the firm report (checked on the funds that are their own benchmark, within 0.05 points on average): 1, 3,
+    5 and 10 years start at the month-end before the date that many years back, so "1 year" on 16 November runs from
+    31 October a year earlier. 1 year is cumulative; longer periods are annualised over the actual time elapsed."""
     d = dates[i]
 
-    def ret(base_day, years=None):
-        j = bisect.bisect_right(dates, base_day) - 1
-        if j < 0:  # history does not reach back far enough
+    def ret(start, annualise=False):
+        j = bisect.bisect_right(dates, start) - 1
+        if j < 0:  # history does not reach back far enough: no figure rather than a wrong one
             return None
         r = vals[i] / vals[j]
-        return round(((r ** (1 / years) if years else r) - 1) * 100, 2)
+        return round(((r ** (365.25 / (d - start).days) if annualise else r) - 1) * 100, 2)
 
     quarter = date(d.year, 3 * ((d.month - 1) // 3) + 1, 1)
-    return [ret(dates[i - 1]) if i else None, ret(d - timedelta(days=7)),
-            ret(date(d.year, d.month, 1) - timedelta(days=1)), ret(quarter - timedelta(days=1)),
-            ret(date(d.year, 1, 1) - timedelta(days=1)), ret(years_back(d, 1)),
-            ret(years_back(d, 3), 3), ret(years_back(d, 5), 5), ret(years_back(d, 10), 10)]
+    return [ret(dates[i - 1]) if i else None, ret(d - timedelta(days=7)), ret(month_end_before(d)),
+            ret(quarter - timedelta(days=1)), ret(date(d.year, 1, 1) - timedelta(days=1)),
+            ret(month_end_before(years_back(d, 1)))] + [ret(month_end_before(years_back(d, n)), True) for n in (3, 5, 10)]
 
 
 def build(closes):

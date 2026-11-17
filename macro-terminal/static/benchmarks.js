@@ -141,7 +141,9 @@ function benchmarksView() {
   ${bm.editing || (!U && bm.draft) ? bmEditor(U) : ""}
   <section>${view.body}${view.note ? `<p class="card__note muted">${view.note}</p>` : ""}</section>
   <section><details><summary>How each stand-in is built</summary><ul class="bm-notes">
-    <li>Blends rebalance to their weights at each month-end. MSCI EAFE + Canada is 89% EFA and 11% EWC, close to Canada's share of MSCI World ex USA.</li>${notes}</ul></details></section>`;
+    <li>Periods follow the firm report they were checked against: 1, 3, 5 and 10 years start at the month-end before the date that many years back. 1 year is cumulative; longer periods are annualised.</li>
+    <li>Blends rebalance to their weights at each month-end. MSCI EAFE + Canada is 89% EFA and 11% EWC, close to Canada's share of MSCI World ex USA.</li>
+    <li>International lines: the ETFs price at the New York close, while MSCI indexes close in each market's own hours. A late move in New York can open a gap of half a point or more over a few days, which fades over longer periods.</li>${notes}</ul></details></section>`;
 }
 
 app.addEventListener("click", (e) => {
