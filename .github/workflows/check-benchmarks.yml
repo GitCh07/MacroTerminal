@@ -1,0 +1,57 @@
+# Temporary: live check of the Benchmarks (beta) stand-ins before merge. Removed before merging.
+name: Check benchmarks (temporary)
+on:
+  push:
+    branches: [benchmarks-beta]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet yfinance certifi
+      - name: Tests
+        working-directory: macro-terminal
+        run: python test_macro_terminal.py && python test_benchmarks.py
+      - name: Live snapshot
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python macro-terminal/macro_terminal.py --export /tmp/snap.json
+      - name: Report
+        working-directory: macro-terminal
+        run: |
+          python - <<'PY'
+          import json, sys
+          from datetime import date, timedelta
+          import benchmarks as bm, macro_terminal as mt
+          s = json.load(open("/tmp/snap.json"))
+          print("ERRORS", json.dumps(s["errors"]))
+          print("MARKETS", json.dumps([[m["id"], m["score"], m["bias"]] for m in s["markets"]]))
+          B = s["benchmarks"]
+          print("BMDATES", json.dumps(B["dates"][-8:]))
+          print("BMLINES", json.dumps({l["name"]: {d: l["returns"].get(d) for d in B["dates"][-8:]} for l in B["lines"]}))
+          print("BMMISSING", json.dumps({l["name"]: l["missing"] for l in B["lines"] if l["missing"]}))
+          # alternatives, to pick the closest stand-in for each line
+          alt = {}
+          start = (date.today() - timedelta(days=11 * 366)).isoformat()
+          for t in ["SPY", "IVV", "VEA", "IEFA", "IEMG", "VWO", "BNDX", "IAGG", "IGOV", "BIL", "SGOV", "SCHO", "SPTL", "VGLT", "HYG", "USHY", "MUB", "VTEB", "SUB", "VTI", "IWM", "SCHH", "VNQ", "EWC", "^R25I", "^RUT"]:
+              try:
+                  rows = mt.yahoo_closes(t, adjusted=True, start=start)
+                  d = [date.fromisoformat(x) for x, _ in rows]; v = [c for _, c in rows]
+                  alt[t] = {d[i].isoformat(): bm.period_returns(d, v, i) for i in range(len(d) - 8, len(d))}
+              except Exception as e:
+                  alt[t] = str(e)
+          series = {}
+          for t in ["EFA", "EWC", "EEM", "IEMG"]:
+              rows = mt.yahoo_closes(t, adjusted=True, start=start)
+              series[t] = ([date.fromisoformat(x) for x, _ in rows], [c for _, c in rows])
+          for w in (0.08, 0.10, 0.12, 0.14):
+              for em in ("EEM", "IEMG"):
+                  d, v = bm.blend(series, {"EFA": 0.8 * (1 - w), "EWC": 0.8 * w, em: 0.2})
+                  alt["8020_can%g_%s" % (w, em)] = {d[i].isoformat(): bm.period_returns(d, v, i) for i in range(len(d) - 8, len(d))}
+          print("ALT", json.dumps(alt))
+          PY

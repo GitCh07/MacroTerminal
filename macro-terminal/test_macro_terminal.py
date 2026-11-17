@@ -83,7 +83,11 @@ def fake_raw(today=TODAY, seed=7):
                 link="https://www.federalreserve.gov/newsevents/speech/sample.htm")]
     sectors = {sym: [[d.isoformat(), 100 + (n - 5) * 0.12 * j + rng.gauss(0, 0.2)] for j, d in enumerate(days[-63:])]
                for n, sym in enumerate(mt.SECTORS)}
-    return dict(obs=obs, errors={}, release_of=release_of, release_dates=release_dates, sp500=sp, fed=fed, sectors=sectors)
+    raw = dict(obs=obs, errors={}, release_of=release_of, release_dates=release_dates, sp500=sp, fed=fed, sectors=sectors)
+    if mt.benchmarks:  # benchmarks (beta)
+        from test_benchmarks import fake_closes
+        raw["benchmarks"] = fake_closes(today)
+    return raw
 
 
 class Maths(unittest.TestCase):
@@ -320,6 +324,9 @@ class Snapshot(unittest.TestCase):
         self.assertTrue(all(v.get("points") or v.get("lines") for v in credit["views"]))
         self.assertEqual(len(s["fed"]), 2)
         self.assertEqual(len(s["regime"]["leanings"]), 3)
+        self.assertEqual([m["id"] for m in s["markets"]], ["spx", "ndx", "rut", "eafe", "em", "ust", "agg", "usd", "gold"])
+        if mt.benchmarks:  # benchmarks (beta)
+            self.assertEqual(len(s["benchmarks"]["lines"]), len(mt.benchmarks.LINES))
         self.assertEqual(len(s["sectors"]["sectors"]), len(mt.SECTORS) - 1)
         self.assertIsNotNone(s["sectors"]["market"])
         prob = next(e for e in s["extras"] if e["id"] == "recprob")["views"][0]["points"]

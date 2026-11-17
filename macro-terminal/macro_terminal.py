@@ -26,6 +26,11 @@ from pathlib import Path
 from statistics import NormalDist
 from xml.etree import ElementTree
 
+try:  # benchmarks (beta): an optional module; delete benchmarks.py and the terminal runs without it
+    import benchmarks
+except ImportError:
+    benchmarks = None
+
 try:
     from zoneinfo import ZoneInfo
     NEW_YORK = ZoneInfo("America/New_York")
@@ -118,8 +123,14 @@ MARKETS = [
          note="Long-duration cash flows, so liquidity and real yields carry double weight."),
     dict(id="rut", label="Russell 2000", weights=dict(growth=2, labor=1, inflation=-1, liquidity=2), skip=[],
          note="Small caps are more cyclical and more dependent on credit, so growth and liquidity carry double weight."),
+    dict(id="eafe", label="MSCI EAFE", weights=dict(growth=1, labor=0, inflation=-1, liquidity=1), skip=[],
+         note="Developed markets outside North America, read through US data only: solid US demand, cooler US inflation and looser conditions, a weaker dollar among them, have tended to lift them in dollar terms. Their own growth and inflation are not in this read."),
+    dict(id="em", label="MSCI EM", weights=dict(growth=1, labor=0, inflation=-1, liquidity=2), skip=[],
+         note="Emerging markets, read through US data only. More exposed than developed markets to the dollar and to credit conditions, so liquidity carries double weight. Local growth and inflation are not in this read."),
     dict(id="ust", label="10-year Treasuries", weights=dict(growth=-1, labor=-1, inflation=-2, liquidity=0), skip=[],
          note="Read as bond prices. Strong activity and, above all, hotter inflation push yields up and prices down."),
+    dict(id="agg", label="US Agg bonds", weights=dict(growth=-1, labor=-1, inflation=-2, liquidity=1), skip=[],
+         note="Read as bond prices. Mostly Treasuries and agency mortgages, so it moves with rates; its corporate share also gains when credit spreads tighten and conditions loosen."),
     dict(id="usd", label="US dollar", weights=dict(growth=1, labor=1, inflation=1, liquidity=-1), skip=["DTWEXBGS"],
          note="A US-only read: strength and inflation at home mean a firmer Fed and higher US yields. Currencies are relative, so treat this as half the picture."),
     dict(id="gold", label="Gold", weights=dict(growth=-1, labor=0, inflation=1, liquidity=2), skip=[],
@@ -539,6 +550,7 @@ def build_snapshot(raw, today):
         recession=recession, rates=rates, calendar=calendar, gdpnow=latest("GDPNOW"), errors=errors,
         extras=extras, midterm=midterm, fed=raw.get("fed", []),
         sectors=sector_returns(raw["sectors"]) if raw.get("sectors") else None,
+        benchmarks=benchmarks.build(raw["benchmarks"]) if benchmarks and raw.get("benchmarks") else None,  # benchmarks (beta)
         recessions=recession_ranges(*series["USREC"]) if "USREC" in series else [],
         method=dict(threshold=THRESHOLD, windows=WINDOWS, stale_days=STALE_DAYS))
 
@@ -592,14 +604,14 @@ def fred(key, path, **params):
 YAHOO_LOCK = threading.Lock()
 
 
-def yahoo_closes(symbol, **window):
-    """Daily closes from Yahoo through yfinance, if it is installed."""
+def yahoo_closes(symbol, adjusted=False, **window):
+    """Daily closes from Yahoo through yfinance, if it is installed. adjusted: reinvest dividends, for total returns."""
     try:
         import yfinance
     except ImportError:
         raise RuntimeError("Needs the yfinance package. In Terminal: python3 -m pip install yfinance") from None
     with YAHOO_LOCK:  # yfinance keeps a SQLite cache; two threads at once fail with "database is locked"
-        close = yfinance.Ticker(symbol).history(auto_adjust=False, **window)["Close"].dropna()
+        close = yfinance.Ticker(symbol).history(auto_adjust=adjusted, **window)["Close"].dropna()
     return [[ts.date().isoformat(), float(v)] for ts, v in close.items()]
 
 
@@ -615,6 +627,20 @@ def sector_history():
     closes = {symbol: yahoo_closes(symbol, period="3mo") for symbol in SECTORS}
     if not any(closes.values()):
         raise RuntimeError("Yahoo returned no sector prices. Press Refresh to try again.")
+    return closes
+
+
+def benchmark_history():
+    """Dividend-adjusted closes for the Benchmarks (beta) tab. A ticker that fails leaves its lines empty."""
+    start = (date.today() - timedelta(days=11 * 366)).isoformat()
+    closes = {}
+    for symbol in benchmarks.TICKERS:
+        try:
+            closes[symbol] = yahoo_closes(symbol, adjusted=True, start=start)
+        except Exception:
+            closes[symbol] = []
+    if not any(closes.values()):
+        raise RuntimeError("Yahoo returned no benchmark prices. Press Refresh to try again.")
     return closes
 
 
@@ -657,6 +683,8 @@ def fetch_all(key, today):
     with ThreadPoolExecutor(6) as pool:  # FRED allows 120 requests a minute; this run makes about 70
         # Not FRED: optional, never fatal.
         sides = {"sp500": pool.submit(sp500_history), "sectors": pool.submit(sector_history), "fed": pool.submit(fed_feed)}
+        if benchmarks:  # benchmarks (beta)
+            sides["benchmarks"] = pool.submit(benchmark_history)
         for sid, got in pool.map(observations, wanted.items()):
             if isinstance(got, Exception):
                 raw["errors"][sid] = str(got)
