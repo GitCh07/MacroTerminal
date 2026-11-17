@@ -269,16 +269,17 @@ class Schedule(unittest.TestCase):
         self.assertEqual(workflow.count('timezone: "America/New_York"'), len(mt.REFRESH_AT))
 
     def test_export_writes_the_schedule_for_the_hosted_page(self):
-        saved = mt.api_key, mt.fetch_all
+        saved = mt.api_key, mt.fetch_all, mt.write_viz
         out = mt.HERE / "snapshot.test.json"
         try:
             mt.api_key, mt.fetch_all = (lambda: "k"), (lambda key, today: fake_raw(today))
+            mt.write_viz = lambda *a: None  # replays: test_viz_frames covers them, and must not touch the real data folder
             mt.export(out)
             snap = json.loads(out.read_text())
             self.assertIn("next_refresh", snap)
             self.assertEqual(len(snap["refresh_at"]), len(mt.REFRESH_AT))
         finally:
-            mt.api_key, mt.fetch_all = saved
+            mt.api_key, mt.fetch_all, mt.write_viz = saved
             out.unlink(missing_ok=True)
 
     def test_tick_refreshes_once_then_backs_off_on_failure(self):
@@ -379,14 +380,15 @@ class Server(unittest.TestCase):
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), partial(mt.Handler, directory=str(mt.HERE / "static")))
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
-        self.saved = mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot
+        self.saved = mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot, mt.write_viz
         mt.CACHE = mt.HERE / "cache.test.json"
+        mt.write_viz = lambda *a: None  # replays: never write the real data folder from a test
 
     def tearDown(self):
         self.srv.shutdown()
         self.srv.server_close()
         mt.CACHE.unlink(missing_ok=True)
-        mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot = self.saved
+        mt.CACHE, mt.api_key, mt.fetch_all, mt.last_slot, mt.write_viz = self.saved
 
     def test_no_key_is_a_setup_answer(self):
         def no_key():

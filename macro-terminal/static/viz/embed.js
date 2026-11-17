@@ -1,44 +1,53 @@
-// Animations toggle for Macro Terminal. Off by default: off, this adds one header button and runs nothing else.
-// On, the Board, Rates and Benchmarks tabs each get their replay below the view, loaded from static/viz/ in a frame,
-// so its code and styles never touch the terminal's.
+// Replays for Macro Terminal: a closed section at the foot of Board, Rates and Benchmarks. Nothing loads until one
+// is opened; opening it loads static/viz/ in a frame, so its code and styles never touch the terminal's.
 (() => {
-  const KEY = "mt.animations";
-  const read = () => { try { return localStorage.getItem(KEY) === "on"; } catch { return false; } };
-  const save = (on) => { try { localStorage.setItem(KEY, on ? "on" : "off"); } catch { /* not saved */ } };
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn";
-  btn.textContent = "Animations";
-  document.getElementById("refresh").before(btn);
-  let on = read(), host = null, frame = null;
+  const SECTIONS = {
+    board: ["bias", "How the bias got here"],
+    rates: ["curve", "Yield curve over time"],
+    benchmarks: ["bench", "Your returns vs. benchmarks over time"],
+  };
+  const isOpen = (view) => { try { return localStorage.getItem("mt.replay." + view) === "open"; } catch { return false; } };
+  const remember = (view, open) => { try { localStorage.setItem("mt.replay." + view, open ? "open" : "closed"); } catch { /* not kept */ } };
+  let host = null, frame = null, shown = null;
 
-  const REPLAYS = { board: ["bias", "Replay of why each market's bias moved"], rates: ["curve", "Replay of the Treasury yield curve"],
-    benchmarks: ["bench", "Benchmarks over time"] };
   function route() {
-    const v = REPLAYS[(location.hash.slice(1) || "board").split("/")[0]], src = on && v ? "viz/index.html?view=" + v[0] : null;
-    if (frame && frame.dataset.src === src) return;
-    host?.remove();  // leaving a view drops its frame, and with it every timer and listener inside
+    const key = (location.hash.slice(1) || "board").split("/")[0];
+    if (key === shown) return;
+    host?.remove();  // leaving a tab drops its replay, and with it every timer and listener inside
     host = frame = null;
-    if (!src) return;
-    host = document.createElement("div");
-    host.className = "container";
+    shown = key;
+    if (!SECTIONS[key]) return;
+    const [view, title] = SECTIONS[key];
+    host = document.createElement("section");
+    host.className = "container replay";
     host.id = "viz-host";
-    frame = document.createElement("iframe");
-    frame.dataset.src = frame.src = src;
-    frame.title = v[1];
-    frame.style.cssText = "display:block;width:100%;height:640px;border:0";
-    host.append(frame);
+    host.innerHTML = `<details><summary>${title}</summary><p class="muted replay__wait" role="status">Loading the chart.</p></details>`;
+    const box = host.firstElementChild;
+    box.addEventListener("toggle", () => {
+      remember(view, box.open);
+      if (!box.open || frame) return;  // closing keeps the frame, so reopening is instant; a closed frame draws nothing
+      frame = document.createElement("iframe");
+      frame.className = "replay__frame";
+      frame.title = title;
+      frame.src = "viz/index.html?view=" + view;
+      box.append(frame);
+    });
     document.getElementById("app").after(host);
+    box.open = isOpen(view);
   }
-  function set(next) {
-    on = next;
-    btn.setAttribute("aria-pressed", on);
-    route();
-  }
-  btn.addEventListener("click", () => { save(!on); set(!on); });
-  addEventListener("hashchange", route);
+
   addEventListener("message", (e) => {
-    if (frame && e.source === frame.contentWindow && e.origin === location.origin && e.data?.mtviz === "height") frame.style.height = e.data.h + "px";
+    if (!frame || e.source !== frame.contentWindow || e.origin !== location.origin || e.data?.mtviz !== "height") return;
+    frame.style.height = e.data.h + "px";
+    host.querySelector(".replay__wait")?.remove();
   });
-  set(on);
+  // When the terminal takes in new data, an open replay waits for its matching frames and reloads.
+  let seen = null;
+  new MutationObserver(() => {
+    const now = typeof S !== "undefined" && S ? S.fetched_at : null;
+    if (seen && now && now !== seen && frame) frame.contentWindow.postMessage({ mtviz: "refresh", for: now }, location.origin);
+    seen = now || seen;
+  }).observe(document.getElementById("updated"), { childList: true, characterData: true, subtree: true });
+  addEventListener("hashchange", route);
+  route();
 })();

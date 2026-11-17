@@ -26,7 +26,7 @@ from pathlib import Path
 from statistics import NormalDist
 from xml.etree import ElementTree
 
-sys.modules.setdefault("macro_terminal", sys.modules[__name__])  # animations: viz_frames shares this copy when run as a script
+sys.modules.setdefault("macro_terminal", sys.modules[__name__])  # replays: viz_frames shares this copy when run as a script
 
 try:  # benchmarks (beta): an optional module; delete benchmarks.py and the terminal runs without it
     import benchmarks
@@ -784,17 +784,23 @@ def get_snapshot(force=False):
                 return dict(cached, stale_reason=str(e))  # FRED is down: yesterday's read beats none
             raise
         CACHE.write_text(json.dumps(snap))
-        write_viz(raw, key, today)  # animations
+        global VIZ_JOB  # replays: built after the answer goes back, so Refresh is no slower for them
+        VIZ_JOB = threading.Thread(target=write_viz, args=(raw, key, today, snap["fetched_at"]), daemon=True)
+        VIZ_JOB.start()
         return snap
 
 
-def write_viz(raw, key, today):  # animations: frames for static/viz, never fatal
+VIZ_LOCK, VIZ_JOB = threading.Lock(), None
+
+
+def write_viz(raw, key, today, built_for):  # replays: frames for static/viz, never fatal
     try:
         import viz_frames
     except ImportError:
         return
-    for name, message in viz_frames.write_all(raw, key, today).items():
-        print("Warning: animation frames %s did not build: %s" % (name, message))
+    with VIZ_LOCK:
+        for name, message in viz_frames.write_all(raw, key, today, built_for=built_for).items():
+            print("Warning: replay frames %s did not build: %s" % (name, message))
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -827,9 +833,10 @@ def export(path):
     raw = fetch_all(api_key(), today)
     for name, message in raw["errors"].items():
         print("Warning: %s did not load: %s" % (name, message))
-    Path(path).write_text(json.dumps(dict(build_snapshot(raw, today), **schedule_info(ny_now()))))
+    snap = build_snapshot(raw, today)
+    Path(path).write_text(json.dumps(dict(snap, **schedule_info(ny_now()))))
     print("Wrote %s" % path)
-    write_viz(raw, api_key(), today)  # animations
+    write_viz(raw, api_key(), today, snap["fetched_at"])  # replays
 
 
 def main():
