@@ -7,7 +7,7 @@ const BM_KEY = "benchmarks.upload";
 const bm = { source: "etf", asOf: null, editing: false, draft: "", error: "" };
 
 // Header text in a report -> position in the period list. Unknown headers simply don't line up for the gap view.
-const BM_HEADERS = { "1d": 0, "1day": 0, "day": 0, "1w": 1, "1wk": 1, "1week": 1, "week": 1, "mtd": 2, "monthtodate": 2,
+const BM_HEADERS = { "1d": 0, "1day": 0, "day": 0, "1w": 1, "1wk": 1, "1week": 1, "week": 1, "lastweek": 1, "mtd": 2, "monthtodate": 2,
   "qtd": 3, "quartertodate": 3, "ytd": 4, "yeartodate": 4, "1y": 5, "1yr": 5, "1year": 5, "12m": 5, "12month": 5,
   "3y": 6, "3yr": 6, "3year": 6, "5y": 7, "5yr": 7, "5year": 7, "10y": 8, "10yr": 8, "10year": 8 };
 const bmKey = (label) => label.toLowerCase().replace(/annuali[sz]ed|\(.*?\)|return|trailing|ann\b/g, "").replace(/[^a-z0-9]/g, "")
@@ -49,19 +49,22 @@ function bmParse(text) {
   const n = Math.max(...rows.map((r) => r.values.length));
   const labels = headers.length >= n ? headers.slice(-n) : n === S.benchmarks.periods.length ? S.benchmarks.periods : null;
   const columns = (labels || rows[0].values.map((_, i) => "Column " + (i + 1))).map((label) => ({ label, period: BM_HEADERS[bmKey(label)] ?? null }));
-  return { rows, columns, assumed: headers.length < n, dropped };
+  // A report often puts its date in the header row, as 11/16/2026 or 2026-11-16.
+  const dated = headers.map((h) => h.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) || h.match(/^(\d{4})-(\d{2})-(\d{2})$/)).find(Boolean);
+  const asOf = !dated ? null : dated[0].includes("/") ? `${dated[3]}-${dated[1].padStart(2, "0")}-${dated[2].padStart(2, "0")}` : dated[0];
+  return { rows, columns, assumed: headers.length < n, dropped, asOf };
 }
 
 const bmSaved = () => store.get(BM_KEY, null);
 const bmCell = (v, dp, plus) => v == null ? '<span class="muted">n/a</span>' : (plus ? signed(v, dp) : num(v, dp));
 
-function bmTable(head, rows, foot) {
-  return `<div class="scroll"><table class="bm-table"><thead><tr><th>Category</th><th>Benchmark</th>${head.map((h) => `<th class="num">${esc(h)}</th>`).join("")}</tr></thead>
+function bmTable(head, rows, foot, tail) {
+  return `<div class="scroll"><table class="bm-table"><thead><tr><th>Category</th><th>Benchmark</th>${head.map((h) => `<th class="num">${esc(h)}</th>`).join("")}${tail ? `<th>${tail}</th>` : ""}</tr></thead>
     <tbody>${rows.join("")}</tbody>${foot || ""}</table></div>`;
 }
 
-function bmRow(cls, category, name, cells) {
-  return `<tr${cls ? ` class="${cls}"` : ""}><td>${esc(category)}</td><th scope="row">${esc(name)}</th>${cells.map((c) => `<td class="num">${c}</td>`).join("")}</tr>`;
+function bmRow(cls, category, name, cells, tail) {
+  return `<tr${cls ? ` class="${cls}"` : ""}><td>${esc(category)}</td><th scope="row">${esc(name)}</th>${cells.map((c) => `<td class="num">${c}</td>`).join("")}${tail != null ? `<td class="bm-source">${tail}</td>` : ""}</tr>`;
 }
 
 // The latest proxy date on or before a given day, so figures are compared at the same close.
@@ -70,14 +73,16 @@ const bmDateFor = (iso) => S.benchmarks.dates.filter((d) => d <= iso).pop() || n
 function bmEtf(B) {
   const asOf = B.dates.includes(bm.asOf) ? bm.asOf : B.dates[B.dates.length - 1];
   const rows = B.lines.map((l) => bmRow(l.blend ? "bm-blend" : "", l.category, l.name,
-    (l.returns[asOf] || B.periods.map(() => null)).map((v) => bmCell(v, 2))));
+    (l.returns[asOf] || B.periods.map(() => null)).map((v) => bmCell(v, 2)),
+    l.missing.length ? `<span class="muted">missing ${esc(l.missing.join(", "))}</span>` : l.blend ? "Blend, rebalanced monthly" : esc(l.source)));
   const dates = B.dates.slice().reverse().map((d) => `<option value="${d}"${d === asOf ? " selected" : ""}>${day(d)}</option>`).join("");
-  return { controls: `<label class="bm-field"><span>As of</span><select class="select" id="bm-asof" name="bm-asof">${dates}</select></label>`,
-    body: bmTable(B.periods, rows), note: "ETF and index total returns with dividends reinvested, cumulative up to a year and annualised beyond." };
+  return { controls: `<label class="bm-field bm-field--inline"><span>As of</span><select class="select" id="bm-asof" name="bm-asof">${dates}</select></label>`,
+    body: bmTable(B.periods, rows, "", "Stand-in"), note: "ETF and index total returns with dividends reinvested, cumulative up to a year and annualised beyond." };
 }
 
 function bmUploadView(U) {
-  const rows = U.rows.map((r) => bmRow("", r.category, r.name, r.values.map((v) => bmCell(v, 2))));
+  const blends = new Set(S.benchmarks.lines.filter((l) => l.blend).map((l) => bmName(l.name)));
+  const rows = U.rows.map((r) => bmRow(blends.has(bmName(r.name)) ? "bm-blend" : "", r.category, r.name, r.values.map((v) => bmCell(v, 2))));
   return { body: bmTable(U.columns.map((c) => c.label), rows),
     note: `Your figures${U.asOf ? " as of " + day(U.asOf) : ""}, saved in this browser ${new Date(U.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.` };
 }
@@ -110,11 +115,11 @@ function bmGap(B, U) {
 function bmEditor(U) {
   return `<section class="panels bm-edit" aria-labelledby="bm-edit-title"><div>
     <h2 id="bm-edit-title">${U ? "Replace your figures" : "Add your figures"}</h2>
-    <p class="muted">Copy the table from your report and paste it below, or choose a CSV. It is read and kept in this browser only. Lines named Caerus are left out.</p>
+    <p class="muted">Copy the table from your report, header row included, and paste it below, or choose a CSV. It is read and kept in this browser only. Lines named Caerus are left out.</p>
     <label class="bm-field bm-field--wide"><span>Table</span><textarea class="bm-paste" id="bm-paste" name="bm-paste" rows="8" spellcheck="false" placeholder="Category, benchmark name, then its returns, one line each">${esc(bm.draft)}</textarea></label>
     <div class="toolbar">
       <label class="bm-field"><span>Or a file</span><input class="select" type="file" id="bm-file" name="bm-file" accept=".csv,.tsv,.txt,text/csv,text/plain"></label>
-      <label class="bm-field"><span>Figures as of</span><input class="select" type="date" id="bm-date" name="bm-date" value="${esc((U && U.asOf) || "")}"></label>
+      <label class="bm-field"><span>Figures as of, if the header row has no date</span><input class="select" type="date" id="bm-date" name="bm-date" value="${esc((U && U.asOf) || "")}"></label>
     </div>
     ${bm.error ? `<p class="notice" role="alert">${esc(bm.error)}</p>` : ""}
     <div class="toolbar"><button class="btn btn--primary" type="button" data-bm-save>Save figures</button>${U ? `<button class="btn" type="button" data-bm-cancel>Cancel</button>` : ""}</div>
@@ -140,7 +145,8 @@ function benchmarksView() {
       ${U ? `<button class="quiet" type="button" data-bm-clear>Remove your figures</button>` : ""}
     </div>${status ? `<p class="muted bm-status">${esc(status)}</p>` : ""}</section>
   ${bm.editing || (!U && bm.draft) ? bmEditor(U) : ""}
-  <section>${view.body}${view.note ? `<p class="card__note muted">${view.note}</p>` : ""}</section>
+  <section><p class="bm-legend"><span class="bm-swatch" aria-hidden="true"></span>Highlighted rows are the blended benchmarks that open each section. The rows beneath are its parts and related indexes.</p>
+    ${view.body}${view.note ? `<p class="card__note muted">${view.note}</p>` : ""}</section>
   <section><details><summary>How each stand-in is built</summary><ul class="bm-notes">
     <li>Periods follow the firm report they were checked against: 1, 3, 5 and 10 years start at the month-end before the date that many years back. 1 year is cumulative; longer periods are annualised.</li>
     <li>Blends rebalance to their weights at each month-end. MSCI EAFE + Canada is 89% EFA and 11% EWC, close to Canada's share of MSCI World ex USA.</li>
@@ -158,7 +164,7 @@ app.addEventListener("click", (e) => {
   else if ("bmSave" in d) {
     const parsed = bmParse(bm.draft);
     if (parsed.error) { bm.error = parsed.error; render(); return; }
-    const asOf = document.getElementById("bm-date")?.value || null;
+    const asOf = document.getElementById("bm-date")?.value || parsed.asOf;
     store.set(BM_KEY, { ...parsed, asOf, savedAt: new Date().toISOString() });
     Object.assign(bm, { editing: false, draft: "", error: "", source: asOf ? "gap" : "upload" });
     render();
