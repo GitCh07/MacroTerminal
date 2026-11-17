@@ -26,6 +26,8 @@ from pathlib import Path
 from statistics import NormalDist
 from xml.etree import ElementTree
 
+sys.modules.setdefault("macro_terminal", sys.modules[__name__])  # animations: viz_frames shares this copy when run as a script
+
 try:  # benchmarks (beta): an optional module; delete benchmarks.py and the terminal runs without it
     import benchmarks
 except ImportError:
@@ -774,13 +776,25 @@ def get_snapshot(force=False):
             if time.time() - fetched < 60 or (not force and fetched >= last_slot(ny_now()).timestamp()):
                 return cached
         try:
-            snap = build_snapshot(fetch_all(api_key(), date.today()), date.today())
+            today, key = date.today(), api_key()
+            raw = fetch_all(key, today)
+            snap = build_snapshot(raw, today)
         except Exception as e:
             if cached and not isinstance(e, Setup):
                 return dict(cached, stale_reason=str(e))  # FRED is down: yesterday's read beats none
             raise
         CACHE.write_text(json.dumps(snap))
+        write_viz(raw, key, today)  # animations
         return snap
+
+
+def write_viz(raw, key, today):  # animations: frames for static/viz, never fatal
+    try:
+        import viz_frames
+    except ImportError:
+        return
+    for name, message in viz_frames.write_all(raw, key, today).items():
+        print("Warning: animation frames %s did not build: %s" % (name, message))
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -815,6 +829,7 @@ def export(path):
         print("Warning: %s did not load: %s" % (name, message))
     Path(path).write_text(json.dumps(dict(build_snapshot(raw, today), **schedule_info(ny_now()))))
     print("Wrote %s" % path)
+    write_viz(raw, api_key(), today)  # animations
 
 
 def main():
