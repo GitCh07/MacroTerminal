@@ -5,6 +5,7 @@ const app = document.getElementById("app");
 const refreshBtn = document.getElementById("refresh");
 const updated = document.getElementById("updated");
 const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+const REBUILD = "https://github.com/GitCh07/MacroTerminal/actions/workflows/pages.yml";  // Run workflow there; it takes about two minutes
 let S = null;          // the snapshot
 let market = "spx";    // selected market on the board
 
@@ -402,7 +403,7 @@ function method() {
   </section>
   <section><h2>Data health</h2><p>Loaded ${esc(new Date(S.fetched_at).toLocaleString())}. ${LOCAL
     ? `While the terminal is running it refreshes on weekdays at ${(S.refresh_at || []).join(", ")} New York time, just after the main releases land, and catches up on any time it missed while the computer was asleep or the terminal was closed. Refresh pulls everything now.`
-    : `This hosted copy is rebuilt by GitHub on weekdays at ${(S.refresh_at || []).join(", ")} New York time, just after the main releases land. GitHub can start these runs late when it is busy. Refresh loads the latest copy.`} An open page checks back every few minutes and redraws when new data arrives.</p>
+    : `This hosted copy is rebuilt by GitHub on weekdays at ${(S.refresh_at || []).join(", ")} New York time, just after the main releases land. A scheduled task also starts the morning rebuild on time, since GitHub can start its own runs hours late. Refresh loads the latest copy; to pull new data now, open <a href="${REBUILD}" target="_blank" rel="noopener">Rebuild now</a> and choose Run workflow (signed in to GitHub as the repo owner). It takes about two minutes.`} An open page checks back every few minutes and redraws when new data arrives.</p>
     <div class="scroll"><table><thead><tr><th>Indicator</th><th>FRED series</th><th>Group</th><th>Latest period</th><th>Status</th></tr></thead><tbody>${health}</tbody></table></div>
     ${other ? `<p>Also failed on this load:</p><ul class="steps">${other}</ul>` : ""}</section>`;
 }
@@ -458,6 +459,7 @@ async function load(force, quiet) {
       const changed = !S || body.fetched_at !== S.fetched_at || body.stale_reason !== S.stale_reason;
       S = body;
       updated.textContent = `Refreshed ${when(S.fetched_at)}.` + (S.next_refresh ? ` Next${LOCAL ? "" : " due"} ${when(S.next_refresh)}` : "");
+      if (!LOCAL) updated.insertAdjacentHTML("beforeend", ` <a href="${REBUILD}" target="_blank" rel="noopener">Rebuild now</a>`);  // the hosted page can't fetch FRED itself; the repo owner starts a rebuild on GitHub
       if (changed) render();
     } else if (!S) fail(body);
     else if (!quiet) { S.stale_reason = body.message; render(); }
